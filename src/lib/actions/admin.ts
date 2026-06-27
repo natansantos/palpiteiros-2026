@@ -516,22 +516,37 @@ export async function seedWorldCupAction(): Promise<{ error: string | null; inse
           existingId = byTeams?.id ?? null
         }
 
-        // Não sobrescreve placar/status: só os dados do confronto.
-        const fields = {
-          round_id: roundId,
-          home_team: homeTeam,
-          away_team: awayTeam,
-          home_flag: getFlag(homeTeam),
-          away_flag: getFlag(awayTeam),
-          match_time: matchTime,
-          is_knockout: isKnockout,
-          api_fixture_id: matchNo,
-        }
+        const hasRealTeams = m.homeTeam != null && m.awayTeam != null
 
         if (existingId) {
-          await admin.from('matches').update(fields).eq('id', existingId)
+          // Nunca sobrescreve placar/status. E só atualiza os times quando a
+          // API já tem o confronto real — assim não apaga times preenchidos
+          // manualmente, substituindo-os de volta por placeholders.
+          const updateFields: Record<string, unknown> = {
+            round_id: roundId,
+            match_time: matchTime,
+            is_knockout: isKnockout,
+            api_fixture_id: matchNo,
+          }
+          if (hasRealTeams) {
+            updateFields.home_team = homeTeam
+            updateFields.away_team = awayTeam
+            updateFields.home_flag = getFlag(homeTeam)
+            updateFields.away_flag = getFlag(awayTeam)
+          }
+          await admin.from('matches').update(updateFields).eq('id', existingId)
         } else {
-          await admin.from('matches').insert({ ...fields, status: 'upcoming' })
+          await admin.from('matches').insert({
+            round_id: roundId,
+            home_team: homeTeam,
+            away_team: awayTeam,
+            home_flag: getFlag(homeTeam),
+            away_flag: getFlag(awayTeam),
+            match_time: matchTime,
+            is_knockout: isKnockout,
+            api_fixture_id: matchNo,
+            status: 'upcoming',
+          })
           inserted++
         }
       }
