@@ -266,63 +266,6 @@ async function computePoints(
   }
 }
 
-export async function syncFromApiAction(formData: FormData) {
-  await assertAdmin()
-  const admin = createAdminClient()
-
-  const matchId = formData.get('match_id') as string
-
-  const { data: match } = await admin
-    .from('matches')
-    .select('api_fixture_id')
-    .eq('id', matchId)
-    .single()
-
-  if (!match?.api_fixture_id) return
-
-  const apiKey = process.env.API_FOOTBALL_KEY
-  if (!apiKey) return
-
-  const res = await fetch(`https://v3.football.api-sports.io/fixtures?id=${match.api_fixture_id}`, {
-    headers: { 'x-apisports-key': apiKey },
-    cache: 'no-store',
-  })
-
-  if (!res.ok) return
-
-  const json = await res.json()
-  const fixture = json?.response?.[0]
-
-  if (!fixture) return
-
-  const status = fixture.fixture?.status?.short
-  if (status !== 'FT') return
-
-  const homeScore = fixture.goals?.home ?? 0
-  const awayScore = fixture.goals?.away ?? 0
-  const penHome = fixture.score?.penalty?.home
-  const penAway = fixture.score?.penalty?.away
-  const wentToPenalties = penHome !== null && penAway !== null
-  const penaltyWinner = wentToPenalties
-    ? penHome > penAway ? 'home' : 'away'
-    : null
-
-  await admin.from('matches').update({
-    home_score: homeScore,
-    away_score: awayScore,
-    went_to_penalties: wentToPenalties,
-    penalty_winner: penaltyWinner,
-    status: 'finished',
-  }).eq('id', matchId)
-
-  await computePoints(matchId, homeScore, awayScore, wentToPenalties, penaltyWinner as 'home' | 'away' | null)
-
-  revalidatePath('/admin/results')
-  revalidatePath('/predictions')
-  revalidatePath('/ranking')
-  revalidatePath('/history')
-}
-
 export async function syncAllPendingFromApiAction() {
   await assertAdmin()
   const admin = createAdminClient()
@@ -395,12 +338,18 @@ export async function syncAllPendingFromApiAction() {
 
 type ZafronixMatch = {
   id: string
+  matchNo?: number | null
   date: string
   kickoff: string
   kickoffUtc: string | null
   stage: string
-  homeTeam: string
-  awayTeam: string
+  // stageNormalized usa nomes longos (round_of_32, quarter_final, ...).
+  // stage usa códigos curtos (r32, qf, ...). Sempre normalize antes de mapear.
+  stageNormalized?: string
+  homeTeam: string | null
+  awayTeam: string | null
+  homeRef?: string | null
+  awayRef?: string | null
   homeScore: number | null
   awayScore: number | null
 }
@@ -440,6 +389,24 @@ const STAGE_ORDER = [
   'round_of_32','round_of_16','quarter_final','semi_final','third_place','final',
 ]
 
+// Antes do sorteio do mata-mata os times vêm null; a API só envia o slot
+// (homeRef/awayRef): "2A" (2º do Grupo A), "3ABCDF" (3º colocado),
+// "W74" (vencedor do jogo 74), "L101" (perdedor do jogo 101).
+// Convertemos para um rótulo legível e ÚNICO por confronto — isso também
+// evita que a deduplicação por (home/away) colapse todos os jogos vazios.
+function refToPlaceholder(ref: string | null | undefined): string {
+  if (!ref) return 'A definir'
+  let mt = ref.match(/^([123])([A-L])$/)
+  if (mt) return `${mt[1]}º Grupo ${mt[2]}`
+  mt = ref.match(/^([123])([A-L]{2,})$/)
+  if (mt) return `${mt[1]}º (${mt[2].split('').join('/')})`
+  mt = ref.match(/^W(\d+)$/)
+  if (mt) return `Vencedor jogo ${mt[1]}`
+  mt = ref.match(/^L(\d+)$/)
+  if (mt) return `Perdedor jogo ${mt[1]}`
+  return ref
+}
+
 export async function seedWorldCupAction(): Promise<{ error: string | null; inserted: number }> {
   try {
     await assertAdmin()
@@ -468,11 +435,13 @@ export async function seedWorldCupAction(): Promise<{ error: string | null; inse
       return { error: 'Nenhum jogo retornado pela API. Verifique a chave ZAFRONIX_API_KEY.', inserted: 0 }
     }
 
-    // Agrupa por stage, ordena conforme a ordem do torneio
+    // Agrupa por stage NORMALIZADO (round_of_32, quarter_final, ...).
+    // O campo `stage` traz códigos curtos (r32, qf) que não batem com os mapas.
     const stageMap = new Map<string, ZafronixMatch[]>()
     for (const m of matches) {
-      if (!stageMap.has(m.stage)) stageMap.set(m.stage, [])
-      stageMap.get(m.stage)!.push(m)
+      const stage = m.stageNormalized ?? m.stage
+      if (!stageMap.has(stage)) stageMap.set(stage, [])
+      stageMap.get(stage)!.push(m)
     }
 
     const sortedStages = Array.from(stageMap.keys()).sort((a, b) => {
@@ -512,21 +481,43 @@ export async function seedWorldCupAction(): Promise<{ error: string | null; inse
       })
 
       for (const m of stageMatches) {
-        const homeTeam = m.homeTeam ?? ''
-        const awayTeam = m.awayTeam ?? ''
+        // Mata-mata sem sorteio ainda: usa o slot (homeRef/awayRef) como rótulo
+        // legível, para o confronto aparecer mesmo sem os times definidos.
+        const homeTeam = m.homeTeam ?? refToPlaceholder(m.homeRef)
+        const awayTeam = m.awayTeam ?? refToPlaceholder(m.awayRef)
 
         // Usa kickoffUtc (UTC real) — kickoff é horário local do estádio
         const matchTime = m.kickoffUtc ?? `${m.date}T${m.kickoff}:00Z`
-        const { data: dup } = await admin
-          .from('matches')
-          .select('id')
-          .eq('home_team', homeTeam)
-          .eq('away_team', awayTeam)
-          .eq('round_id', roundId)
-          .maybeSingle()
-        if (dup?.id) continue
+        // matchNo (1–104) é a chave estável de cada jogo na API. Guardamos em
+        // api_fixture_id para o upsert: quando o sorteio definir os times, uma
+        // nova rodada do botão ATUALIZA o placeholder em vez de duplicar.
+        const matchNo = m.matchNo ?? null
 
-        await admin.from('matches').insert({
+        // Procura o jogo já existente: 1) pela chave estável (matchNo);
+        // 2) fallback por (rodada + times) para casar jogos antigos que ainda
+        //    não tinham api_fixture_id e fazer o backfill.
+        let existingId: string | null = null
+        if (matchNo != null) {
+          const { data: byNo } = await admin
+            .from('matches')
+            .select('id')
+            .eq('api_fixture_id', matchNo)
+            .maybeSingle()
+          existingId = byNo?.id ?? null
+        }
+        if (!existingId) {
+          const { data: byTeams } = await admin
+            .from('matches')
+            .select('id')
+            .eq('round_id', roundId)
+            .eq('home_team', homeTeam)
+            .eq('away_team', awayTeam)
+            .maybeSingle()
+          existingId = byTeams?.id ?? null
+        }
+
+        // Não sobrescreve placar/status: só os dados do confronto.
+        const fields = {
           round_id: roundId,
           home_team: homeTeam,
           away_team: awayTeam,
@@ -534,9 +525,15 @@ export async function seedWorldCupAction(): Promise<{ error: string | null; inse
           away_flag: getFlag(awayTeam),
           match_time: matchTime,
           is_knockout: isKnockout,
-          status: 'upcoming',
-        })
-        inserted++
+          api_fixture_id: matchNo,
+        }
+
+        if (existingId) {
+          await admin.from('matches').update(fields).eq('id', existingId)
+        } else {
+          await admin.from('matches').insert({ ...fields, status: 'upcoming' })
+          inserted++
+        }
       }
     }
 

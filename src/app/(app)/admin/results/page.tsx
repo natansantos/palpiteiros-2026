@@ -1,6 +1,6 @@
 import { requireAdmin } from '@/lib/require-admin'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { saveResultAction, syncFromApiAction } from '@/lib/actions/admin'
+import { saveResultAction } from '@/lib/actions/admin'
 import { getTeamNamePTBR } from '@/lib/team-names'
 import { getFlagUrl } from '@/lib/country-codes'
 import SyncAllButton from '@/components/sync-all-button'
@@ -82,18 +82,6 @@ export default async function ResultsPage() {
                   {(match.rounds as { name: string } | undefined)?.name} · {new Date(match.match_time).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                 </p>
               </div>
-              {match.api_fixture_id && (
-                <form action={syncFromApiAction}>
-                  <input type="hidden" name="match_id" value={match.id} />
-                  <button
-                    type="submit"
-                    className="text-xs px-3 py-1.5 rounded-lg font-medium"
-                    style={{ backgroundColor: 'rgba(0,230,118,0.1)', color: 'var(--accent-green)', border: '1px solid var(--accent-green)' }}
-                  >
-                    🔄 Sincronizar
-                  </button>
-                </form>
-              )}
             </div>
 
             <form action={saveResultAction} className="flex flex-wrap gap-3 items-end">
