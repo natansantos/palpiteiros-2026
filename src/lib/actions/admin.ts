@@ -170,7 +170,7 @@ export async function recalculateAllPointsAction(): Promise<{ error: string | nu
 
   const { data: finishedMatches } = await admin
     .from('matches')
-    .select('id, home_score, away_score, went_to_penalties, penalty_winner')
+    .select('id, home_score, away_score, went_to_penalties, penalty_winner, rounds(phase)')
     .eq('status', 'finished')
 
   if (!finishedMatches || finishedMatches.length === 0) {
@@ -181,6 +181,8 @@ export async function recalculateAllPointsAction(): Promise<{ error: string | nu
 
   for (const match of finishedMatches) {
     if (match.home_score === null || match.away_score === null) continue
+
+    const phase = (match as { rounds?: { phase?: string } | null }).rounds?.phase ?? null
 
     const { data: predictions } = await admin
       .from('predictions')
@@ -199,7 +201,8 @@ export async function recalculateAllPointsAction(): Promise<{ error: string | nu
           home_score_pred: pred.home_score_pred,
           away_score_pred: pred.away_score_pred,
           penalty_winner_pred: pred.penalty_winner_pred ?? null,
-        }
+        },
+        phase
       )
       await admin.from('predictions').update({ points }).eq('id', pred.id)
       totalPredictions++
@@ -249,6 +252,14 @@ async function computePoints(
 ) {
   const admin = createAdminClient()
 
+  // Fase do jogo (rounds.phase) define o multiplicador de pontos.
+  const { data: matchRow } = await admin
+    .from('matches')
+    .select('rounds(phase)')
+    .eq('id', matchId)
+    .single()
+  const phase = (matchRow as { rounds?: { phase?: string } | null } | null)?.rounds?.phase ?? null
+
   const { data: predictions } = await admin
     .from('predictions')
     .select('id, home_score_pred, away_score_pred, penalty_winner_pred')
@@ -259,7 +270,8 @@ async function computePoints(
   for (const pred of predictions) {
     const points = calculatePoints(
       { home_score: homeScore, away_score: awayScore, went_to_penalties: wentToPenalties, penalty_winner: penaltyWinner },
-      { home_score_pred: pred.home_score_pred, away_score_pred: pred.away_score_pred, penalty_winner_pred: pred.penalty_winner_pred }
+      { home_score_pred: pred.home_score_pred, away_score_pred: pred.away_score_pred, penalty_winner_pred: pred.penalty_winner_pred },
+      phase
     )
 
     await admin.from('predictions').update({ points }).eq('id', pred.id)

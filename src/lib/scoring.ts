@@ -11,7 +11,31 @@ interface PredictionInput {
   penalty_winner_pred: 'home' | 'away' | null
 }
 
-export function calculatePoints(result: MatchResult, prediction: PredictionInput): number {
+// Multiplicador por fase: o mata-mata vale mais que a fase de grupos, crescendo
+// até a final, para tornar a disputa mais aberta nas fases decisivas.
+// As chaves correspondem ao campo `rounds.phase` no banco.
+export const PHASE_MULTIPLIER: Record<string, number> = {
+  group: 1,
+  round_of_32: 2,
+  round_of_16: 2,
+  quarterfinal: 3,
+  semifinal: 3,
+  third_place: 3,
+  final: 4,
+}
+
+export function getPhaseMultiplier(phase?: string | null): number {
+  if (!phase) return 1
+  return PHASE_MULTIPLIER[phase] ?? 1
+}
+
+// `phase` é o `rounds.phase` do jogo. O multiplicador incide sobre a pontuação
+// total (placar + bônus de pênaltis). Sem phase, assume grupos (×1).
+export function calculatePoints(
+  result: MatchResult,
+  prediction: PredictionInput,
+  phase?: string | null
+): number {
   const { home_score, away_score, went_to_penalties, penalty_winner } = result
   const { home_score_pred, away_score_pred, penalty_winner_pred } = prediction
 
@@ -32,5 +56,5 @@ export function calculatePoints(result: MatchResult, prediction: PredictionInput
     points += 3
   }
 
-  return points
+  return points * getPhaseMultiplier(phase)
 }

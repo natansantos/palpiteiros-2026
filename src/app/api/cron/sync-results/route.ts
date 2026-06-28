@@ -29,7 +29,7 @@ export async function GET(request: Request) {
 
   const { data: pendingMatches } = await admin
     .from('matches')
-    .select('id, home_team, away_team, match_time')
+    .select('id, home_team, away_team, match_time, rounds(phase)')
     .neq('status', 'finished')
     .lt('match_time', cutoff)
 
@@ -109,10 +109,13 @@ export async function GET(request: Request) {
       .select('id, user_id, home_score_pred, away_score_pred, penalty_winner_pred')
       .eq('match_id', match.id)
 
+    const phase = (match as { rounds?: { phase?: string } | null }).rounds?.phase ?? null
+
     for (const pred of predictions ?? []) {
       const points = calculatePoints(
         { home_score: homeScore, away_score: awayScore, went_to_penalties: false, penalty_winner: null },
-        { home_score_pred: pred.home_score_pred, away_score_pred: pred.away_score_pred, penalty_winner_pred: pred.penalty_winner_pred ?? null }
+        { home_score_pred: pred.home_score_pred, away_score_pred: pred.away_score_pred, penalty_winner_pred: pred.penalty_winner_pred ?? null },
+        phase
       )
       await admin.from('predictions').update({ points }).eq('id', pred.id)
 

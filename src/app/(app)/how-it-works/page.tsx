@@ -49,9 +49,62 @@ export default function HowItWorksPage() {
             <p className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>Nao acertou o resultado</p>
           </div>
         </div>
+        <p className="text-xs mt-3" style={{ color: 'var(--text-muted)' }}>
+          A tabela acima é a pontuação <strong>base</strong> (vale como está na fase de grupos).
+        </p>
+
+        {/* Multiplicador por fase */}
         <div className="mt-6 pt-6 border-t" style={{ borderColor: 'var(--bg-border)' }}>
-          <p className="text-sm font-semibold mb-3" style={{ color: 'var(--accent-green)' }}>Bônus em Mata-mata</p>
-          <p className="text-xs" style={{ color: 'var(--text-primary)' }}>Se o jogo for para pênaltis e voce acertar o vencedor nos pênaltis: <strong>+3 pts bônus</strong></p>
+          <p className="text-sm font-semibold mb-1" style={{ color: 'var(--accent-yellow)' }}>Vale mais no mata-mata!</p>
+          <p className="text-xs mb-4" style={{ color: 'var(--text-muted)' }}>
+            Quanto mais avança a Copa, mais cada acerto vale. A pontuação base é multiplicada pela fase — então uma boa rodada nas fases finais pode virar o ranking.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs border-collapse">
+              <thead>
+                <tr style={{ color: 'var(--text-muted)' }}>
+                  <th className="text-left font-semibold py-2 pr-3">Fase</th>
+                  <th className="text-center font-semibold py-2 px-2">Mult.</th>
+                  <th className="text-center font-semibold py-2 px-2">🎯 Exato</th>
+                  <th className="text-center font-semibold py-2 px-2">✅ Result.+Gol</th>
+                  <th className="text-center font-semibold py-2 px-2">✅ Result.</th>
+                  <th className="text-center font-semibold py-2 px-2">⚽ Gol</th>
+                  <th className="text-center font-semibold py-2 pl-2">🥅 Bônus pên.</th>
+                </tr>
+              </thead>
+              <tbody style={{ color: 'var(--text-primary)' }}>
+                {[
+                  { fase: 'Fase de Grupos', mult: '×1', v: [10, 7, 5, 2], bonus: '—' },
+                  { fase: '16-avos de Final', mult: '×2', v: [20, 14, 10, 4], bonus: '+6' },
+                  { fase: 'Oitavas de Final', mult: '×2', v: [20, 14, 10, 4], bonus: '+6' },
+                  { fase: 'Quartas de Final', mult: '×3', v: [30, 21, 15, 6], bonus: '+9' },
+                  { fase: 'Semifinal', mult: '×3', v: [30, 21, 15, 6], bonus: '+9' },
+                  { fase: 'Disputa de 3º lugar', mult: '×3', v: [30, 21, 15, 6], bonus: '+9' },
+                  { fase: 'Final', mult: '×4', v: [40, 28, 20, 8], bonus: '+12' },
+                ].map((row) => (
+                  <tr key={row.fase} className="border-t" style={{ borderColor: 'var(--bg-border)' }}>
+                    <td className="py-2 pr-3 font-medium whitespace-nowrap">{row.fase}</td>
+                    <td className="text-center py-2 px-2 font-bebas text-base" style={{ color: 'var(--accent-yellow)' }}>{row.mult}</td>
+                    <td className="text-center py-2 px-2">{row.v[0]}</td>
+                    <td className="text-center py-2 px-2">{row.v[1]}</td>
+                    <td className="text-center py-2 px-2">{row.v[2]}</td>
+                    <td className="text-center py-2 px-2">{row.v[3]}</td>
+                    <td className="text-center py-2 pl-2">{row.bonus}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="mt-6 pt-6 border-t" style={{ borderColor: 'var(--bg-border)' }}>
+          <p className="text-sm font-semibold mb-3" style={{ color: 'var(--accent-green)' }}>Bônus de pênaltis (mata-mata)</p>
+          <p className="text-xs" style={{ color: 'var(--text-primary)' }}>
+            Se o jogo for para os pênaltis e você acertar quem avança, ganha <strong>+3 pts</strong> de bônus — que também são multiplicados pela fase (ex.: <strong>+12 na final</strong>). O palpite de pênaltis só conta quando você prevê empate no tempo normal.
+          </p>
+          <p className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>
+            Exemplo: placar exato de um empate na final que vai aos pênaltis, com o vencedor certo = 40 + 12 = <strong>52 pts</strong>.
+          </p>
         </div>
       </section>
 
