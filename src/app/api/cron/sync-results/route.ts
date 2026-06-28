@@ -21,10 +21,11 @@ export async function GET(request: Request) {
 
   const admin = createAdminClient()
 
-  // Só considera jogos que já deveriam ter terminado: 1 hora após o horário
-  // previsto (match_time + 60 min). O guard de status da API abaixo evita
-  // finalizar partidas ainda em andamento.
-  const cutoff = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+  // match_time é o horário de INÍCIO do jogo. Só considera jogos que já
+  // deveriam ter terminado: 3 horas após o início (match_time + 180 min),
+  // cobrindo tempo normal + intervalo + prorrogação/pênaltis. O guard de
+  // status da API abaixo ainda evita finalizar partidas em andamento.
+  const cutoff = new Date(Date.now() - 180 * 60 * 1000).toISOString()
 
   const { data: pendingMatches } = await admin
     .from('matches')
