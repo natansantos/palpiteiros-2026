@@ -72,20 +72,61 @@ export default async function PredictionsPage() {
     )
   }
 
+  // Próximos: ainda não finalizados (próximo jogo no topo).
+  // Finalizados: já encerrados (mais recente no topo).
+  const upcoming = matches.filter((m) => m.status !== 'finished')
+  const finished = matches.filter((m) => m.status === 'finished').reverse()
+
+  const renderCard = (match: Match) => (
+    <MatchCard
+      key={match.id}
+      match={match}
+      prediction={predictionsByMatch.get(match.id) ?? null}
+      round={roundsMap.get(match.round_id)}
+    />
+  )
+
   return (
     <div className="p-6 max-w-2xl mx-auto">
       <h1 className="font-bebas text-4xl mb-1" style={{ color: 'var(--text-primary)' }}>Palpites</h1>
       <p className="text-sm mb-6" style={{ color: 'var(--text-muted)' }}>Faça seus palpites antes do deadline</p>
 
       <div className="space-y-4">
-        {matches.map((match) => (
-          <MatchCard
-            key={match.id}
-            match={match}
-            prediction={predictionsByMatch.get(match.id) ?? null}
-            round={roundsMap.get(match.round_id)}
-          />
-        ))}
+        {upcoming.length > 0 && (
+          <details open className="group rounded-2xl border overflow-hidden" style={{ borderColor: 'var(--bg-border)' }}>
+            <summary
+              className="flex items-center justify-between px-4 py-3 cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden"
+              style={{ backgroundColor: 'var(--bg-surface)' }}
+            >
+              <span className="font-semibold text-sm" style={{ color: 'var(--text-primary)' }}>
+                ⚽ Próximos jogos
+                <span className="ml-2 text-xs font-normal" style={{ color: 'var(--text-muted)' }}>({upcoming.length})</span>
+              </span>
+              <span className="transition-transform group-open:rotate-90" style={{ color: 'var(--text-muted)' }}>▸</span>
+            </summary>
+            <div className="space-y-4 p-4 pt-2">
+              {upcoming.map(renderCard)}
+            </div>
+          </details>
+        )}
+
+        {finished.length > 0 && (
+          <details className="group rounded-2xl border overflow-hidden" style={{ borderColor: 'var(--bg-border)' }}>
+            <summary
+              className="flex items-center justify-between px-4 py-3 cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden"
+              style={{ backgroundColor: 'var(--bg-surface)' }}
+            >
+              <span className="font-semibold text-sm" style={{ color: 'var(--text-primary)' }}>
+                🏁 Finalizados
+                <span className="ml-2 text-xs font-normal" style={{ color: 'var(--text-muted)' }}>({finished.length})</span>
+              </span>
+              <span className="transition-transform group-open:rotate-90" style={{ color: 'var(--text-muted)' }}>▸</span>
+            </summary>
+            <div className="space-y-4 p-4 pt-2">
+              {finished.map(renderCard)}
+            </div>
+          </details>
+        )}
       </div>
     </div>
   )
