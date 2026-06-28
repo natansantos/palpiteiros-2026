@@ -3,6 +3,14 @@ import { redirect } from 'next/navigation'
 import MatchCard from '@/components/match-card'
 import type { Match, Prediction, Round } from '@/lib/types'
 
+// Confrontos do mata-mata sem times definidos ficam com rótulos de slot
+// ("1º Grupo E", "3º (A/B/C/D/F)", "Vencedor jogo 74", "A definir"). Esses não
+// devem aparecer para palpite até que os times reais sejam preenchidos.
+function isPlaceholderTeam(name: string | null | undefined): boolean {
+  if (!name) return true
+  return /^\d+º|^Vencedor jogo|^Perdedor jogo|^A definir/.test(name)
+}
+
 export default async function PredictionsPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -26,7 +34,10 @@ export default async function PredictionsPage() {
       .in('round_id', roundIds)
       .order('match_time', { ascending: true })
 
-    matches = matchData ?? []
+    // Esconde jogos do mata-mata ainda sem confronto definido (placeholders).
+    matches = (matchData ?? []).filter(
+      (m) => !isPlaceholderTeam(m.home_team) && !isPlaceholderTeam(m.away_team)
+    )
 
     if (matches.length > 0) {
       const { data: predData } = await supabase
